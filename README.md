@@ -53,7 +53,3 @@ uvicorn app.main:app --reload
 | GET | `/driver/status` | Driver info + active trip status |
 | POST | `/driver/trip/start` | Start trip (multipart with odometer image) |
 | POST | `/driver/trip/end` | End trip (multipart with odometer image) |
-
-## Default Admin Credentials
-- **Phone:** `+201000000000`
-- **Password:** `admin123`

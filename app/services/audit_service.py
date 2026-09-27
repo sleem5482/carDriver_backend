@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session
 from app.models.audit_log import AuditLog
 
 
+import uuid
+
 def log_action(
     db: Session,
     *,
-    user_id: str | None,
+    user_id: str | uuid.UUID | None,
     action: str,
     old_value: dict | None = None,
     new_value: dict | None = None,
@@ -22,6 +24,12 @@ def log_action(
     Create an audit log entry.
     server_datetime is always UTC server time — never trust client time.
     """
+    if isinstance(user_id, str):
+        try:
+            user_id = uuid.UUID(user_id)
+        except ValueError:
+            pass  # if it's not a valid UUID string, let it pass or handle it? We can just pass it and let DB fail, or set to None. Actually, user_id should always be a valid UUID here.
+
     entry = AuditLog(
         user_id=user_id,
         action=action,
