@@ -13,6 +13,7 @@ from app.dependencies import get_db, require_admin
 from app.models.user import User, UserRole
 from app.models.vehicle import Vehicle, VehicleStatus
 from app.models.driver_vehicle import DriverVehicleAssignment
+from app.models.trip import Trip
 from app.schemas.user import (
     UserCreate, UserUpdate, UserResponse, UserListResponse, VehicleBrief,
 )
@@ -66,29 +67,24 @@ def _build_user_response(db: Session, user: User) -> UserResponse:
 
 def _assign_vehicle(db: Session, driver_id: uuid.UUID, vehicle_id: uuid.UUID, admin_id: str):
     """Assign a vehicle to a driver, deactivating any prior assignment."""
-    # Deactivate current assignment for this driver
-    db.query(DriverVehicleAssignment).filter(
-        DriverVehicleAssignment.driver_id == driver_id,
-        DriverVehicleAssignment.is_active == True,
-    ).update({
-        "is_active": False,
-        "unassigned_at": datetime.now(timezone.utc),
-    })
-
-    # Set old vehicle back to AVAILABLE
+    # Capture the current active assignment BEFORE deactivating it
     old_assignment = (
         db.query(DriverVehicleAssignment)
         .filter(
             DriverVehicleAssignment.driver_id == driver_id,
-            DriverVehicleAssignment.is_active == False,
+            DriverVehicleAssignment.is_active == True,
         )
-        .order_by(DriverVehicleAssignment.unassigned_at.desc())
         .first()
     )
+
     if old_assignment:
-        db.query(Vehicle).filter(Vehicle.id == old_assignment.vehicle_id).update(
-            {"status": VehicleStatus.AVAILABLE}
-        )
+        old_assignment.is_active = False
+        old_assignment.unassigned_at = datetime.now(timezone.utc)
+        # Free the old vehicle only if it's different from the one being assigned
+        if old_assignment.vehicle_id != vehicle_id:
+            db.query(Vehicle).filter(Vehicle.id == old_assignment.vehicle_id).update(
+                {"status": VehicleStatus.AVAILABLE}
+            )
 
     # Create new assignment
     new_assignment = DriverVehicleAssignment(
@@ -109,6 +105,7 @@ def _assign_vehicle(db: Session, driver_id: uuid.UUID, vehicle_id: uuid.UUID, ad
         action="ASSIGN_VEHICLE",
         new_value={"driver_id": str(driver_id), "vehicle_id": str(vehicle_id)},
     )
+
 
 
 # ── Endpoints ─────────────────────────────────────────────
@@ -212,12 +209,15 @@ def update_user(
         "status": user.status.value,
     }
 
-    # Apply updates
+    # Apply only fields that were explicitly sent AND are not None
+    # This allows partial updates — sending null for a field is treated as "don't change it"
     update_data = body.model_dump(exclude_unset=True, exclude={"vehicle_id", "password"})
     for field, value in update_data.items():
-        setattr(user, field, value)
+        if value is not None:  # skip nulls — keep existing value
+            setattr(user, field, value)
 
-    if body.password is not None:
+    # Password update only if a non-empty string was provided
+    if body.password:
         user.hashed_password = hash_password(body.password)
 
     # Vehicle re-assignment
@@ -234,7 +234,7 @@ def update_user(
         user_id=str(admin.id),
         action="UPDATE_USER",
         old_value=old_values,
-        new_value=body.model_dump(exclude_unset=True),
+        new_value={k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None},
     )
     db.commit()
     db.refresh(user)
@@ -252,7 +252,7 @@ def delete_user(
     if not user:
         raise not_found("User not found.")
 
-    # Release assigned vehicle
+    # Step 1: Release active vehicle assignments — free the vehicle status back to AVAILABLE
     active_assignments = (
         db.query(DriverVehicleAssignment)
         .filter(
@@ -262,17 +262,33 @@ def delete_user(
         .all()
     )
     for assignment in active_assignments:
-        assignment.is_active = False
-        assignment.unassigned_at = datetime.now(timezone.utc)
         db.query(Vehicle).filter(Vehicle.id == assignment.vehicle_id).update(
             {"status": VehicleStatus.AVAILABLE}
         )
 
+    # Step 2: Bulk-delete ALL driver_vehicle_assignments via SQL (not ORM cascade).
+    # REASON: lazy="selectin" already loaded these objects into SQLAlchemy's session
+    # identity map. When db.delete(user) runs, SQLAlchemy tries to NULL out driver_id
+    # on those loaded objects — but driver_id is NOT NULL, causing IntegrityError/500.
+    # A direct SQL DELETE bypasses the ORM identity map completely.
+    db.query(DriverVehicleAssignment).filter(
+        DriverVehicleAssignment.driver_id == user_id
+    ).delete(synchronize_session="fetch")
+
+    # Step 3: Bulk-delete all trips for this driver (same ORM identity map issue).
+    db.query(Trip).filter(
+        Trip.driver_id == user_id
+    ).delete(synchronize_session="fetch")
+
+    # Step 4: Log before deleting (audit_logs.user_id will be SET NULL by DB FK cascade)
     log_action(
         db,
         user_id=str(admin.id),
         action="DELETE_USER",
         old_value={"user_id": str(user.id), "full_name": user.full_name},
     )
+
+    # Step 5: Delete the user row
     db.delete(user)
     db.commit()
+

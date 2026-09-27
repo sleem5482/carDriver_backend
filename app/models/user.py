@@ -65,10 +65,17 @@ class User(Base):
 
     # ── Relationships ─────────────────────────────────────
     vehicle_assignments = relationship(
-        "DriverVehicleAssignment", back_populates="driver", lazy="selectin"
+        "DriverVehicleAssignment", back_populates="driver", lazy="selectin",
+        passive_deletes=True,
     )
-    trips = relationship("Trip", back_populates="driver", lazy="selectin")
-    audit_logs = relationship("AuditLog", back_populates="user", lazy="selectin")
+    trips = relationship(
+        "Trip", back_populates="driver", lazy="selectin",
+        passive_deletes=True,
+    )
+    audit_logs = relationship(
+        "AuditLog", back_populates="user", lazy="selectin",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return f"<User {self.full_name} ({self.role.value})>"
