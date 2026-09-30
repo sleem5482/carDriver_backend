@@ -120,5 +120,18 @@ class Trip(Base):
             return round(delta.total_seconds() / 3600, 2)
         return None
 
+    @property
+    def working_hours_formatted(self) -> str | None:
+        """Human-readable duration, e.g. '1h 30m', '45m', '2h'. None while trip is open."""
+        if self.end_server_time is None or self.start_server_time is None:
+            return None
+        total_minutes = int((self.end_server_time - self.start_server_time).total_seconds() // 60)
+        hours, minutes = divmod(total_minutes, 60)
+        if hours and minutes:
+            return f"{hours}h {minutes}m"
+        if hours:
+            return f"{hours}h"
+        return f"{minutes}m"
+
     def __repr__(self) -> str:
         return f"<Trip {self.id} driver={self.driver_id} status={self.status.value}>"

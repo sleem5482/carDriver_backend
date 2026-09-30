@@ -107,6 +107,31 @@ def _assign_vehicle(db: Session, driver_id: uuid.UUID, vehicle_id: uuid.UUID, ad
     )
 
 
+def _unassign_vehicle(db: Session, driver_id: uuid.UUID, admin_id: str):
+    """Deactivate the driver's current assignment and free the vehicle."""
+    active = (
+        db.query(DriverVehicleAssignment)
+        .filter(
+            DriverVehicleAssignment.driver_id == driver_id,
+            DriverVehicleAssignment.is_active == True,
+        )
+        .first()
+    )
+    if not active:
+        return  # nothing to unassign
+
+    active.is_active = False
+    active.unassigned_at = datetime.now(timezone.utc)
+    db.query(Vehicle).filter(Vehicle.id == active.vehicle_id).update(
+        {"status": VehicleStatus.AVAILABLE}
+    )
+    log_action(
+        db,
+        user_id=admin_id,
+        action="UNASSIGN_VEHICLE",
+        old_value={"driver_id": str(driver_id), "vehicle_id": str(active.vehicle_id)},
+    )
+
 
 # ── Endpoints ─────────────────────────────────────────────
 
@@ -220,14 +245,21 @@ def update_user(
     if body.password:
         user.hashed_password = hash_password(body.password)
 
-    # Vehicle re-assignment
-    if body.vehicle_id is not None:
-        vehicle = db.query(Vehicle).filter(Vehicle.id == body.vehicle_id).first()
-        if not vehicle:
-            raise not_found("Vehicle not found.")
-        if vehicle.status not in (VehicleStatus.AVAILABLE, VehicleStatus.ASSIGNED):
-            raise conflict("Vehicle is not available for assignment.")
-        _assign_vehicle(db, user.id, body.vehicle_id, str(admin.id))
+    # Vehicle re-assignment logic — uses model_fields_set to distinguish:
+    #   - vehicle_id NOT in request  → do nothing (don't touch assignment)
+    #   - vehicle_id: null in request → unassign the current vehicle
+    #   - vehicle_id: <uuid> in request → assign/re-assign to that vehicle
+    if "vehicle_id" in body.model_fields_set:
+        if body.vehicle_id is None:
+            # Explicitly sent null → unassign current vehicle
+            _unassign_vehicle(db, user.id, str(admin.id))
+        else:
+            vehicle = db.query(Vehicle).filter(Vehicle.id == body.vehicle_id).first()
+            if not vehicle:
+                raise not_found("Vehicle not found.")
+            if vehicle.status not in (VehicleStatus.AVAILABLE, VehicleStatus.ASSIGNED):
+                raise conflict("Vehicle is not available for assignment.")
+            _assign_vehicle(db, user.id, body.vehicle_id, str(admin.id))
 
     log_action(
         db,

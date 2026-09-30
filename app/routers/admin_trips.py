@@ -62,6 +62,7 @@ def list_trips(
                 start_date=trip.start_date,
                 status=trip.status,
                 verification_status=trip.verification_status,
+                route_notes=trip.route_notes,
                 start_odometer_image=trip.start_odometer_image,
                 end_odometer_image=trip.end_odometer_image,
                 km_used=trip.km_used,

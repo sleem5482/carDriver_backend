@@ -27,6 +27,11 @@ class VehicleUpdate(BaseModel):
     status: VehicleStatus | None = None
 
 
+class VehicleAvailabilityUpdate(BaseModel):
+    """Schema for PATCH /vehicles/{id}/availability — simple on/off toggle."""
+    is_available: bool  # True = AVAILABLE, False = NOT AVAILABLE (cannot be changed if ASSIGNED)
+
+
 class VehicleResponse(BaseModel):
     id: uuid.UUID
     vehicle_type: str

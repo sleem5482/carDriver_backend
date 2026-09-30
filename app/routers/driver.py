@@ -9,15 +9,15 @@ Driver router — mobile app endpoints.
 import uuid
 from datetime import datetime, timezone, date
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from sqlalchemy.orm import Session, joinedload
 
 from app.dependencies import get_db, require_driver
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.models.driver_vehicle import DriverVehicleAssignment
 from app.models.trip import Trip, TripStatus
-from app.schemas.trip import DriverStatusResponse
+from app.schemas.trip import DriverStatusResponse, DriverTripListResponse
 from app.services.cloudinary_service import upload_odometer_image
 from app.services.trip_service import get_open_trip, apply_exceptions
 from app.services.audit_service import log_action
@@ -65,6 +65,40 @@ def driver_status(
     )
 
 
+# ── GET /driver/trips ────────────────────────────────────
+
+@router.get("/trips", response_model=list[DriverTripListResponse])
+def get_my_trips(
+    status: TripStatus | None = Query(None, description="Filter by trip status: OPEN or COMPLETED"),
+    limit: int = Query(50, ge=1, le=200, description="Max trips to return"),
+    offset: int = Query(0, ge=0, description="Trips to skip (pagination)"),
+    db: Session = Depends(get_db),
+    driver: User = Depends(require_driver),
+):
+    """
+    Get all trips for the authenticated driver, ordered newest first.
+
+    - Optionally filter by `status` (OPEN or COMPLETED).
+    - Supports pagination via `limit` and `offset`.
+    """
+    query = (
+        db.query(Trip)
+        .options(joinedload(Trip.vehicle))
+        .filter(Trip.driver_id == driver.id)
+    )
+
+    if status is not None:
+        query = query.filter(Trip.status == status)
+
+    return (
+        query
+        .order_by(Trip.start_server_time.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+
 # ── POST /driver/trip/start ──────────────────────────────
 
 @router.post("/trip/start", status_code=201)
@@ -73,6 +107,7 @@ async def start_trip(
     longitude: float = Form(...),
     gps_accuracy: float = Form(...),
     start_odometer: float = Form(...),
+    route_notes: str = Form(None),
     odometer_image: UploadFile = File(...),
     db: Session = Depends(get_db),
     driver: User = Depends(require_driver),
@@ -81,7 +116,7 @@ async def start_trip(
     Start a new trip.
 
     - Accepts an UploadFile for the odometer image → uploads to Cloudinary.
-    - Records latitude, longitude, GPS accuracy, and start odometer.
+    - Records latitude, longitude, GPS accuracy, start odometer, and route notes.
     - Sets status to OPEN.
 
     CRUCIAL RULES:
@@ -115,6 +150,7 @@ async def start_trip(
         start_gps_accuracy=gps_accuracy,
         start_odometer=start_odometer,
         start_odometer_image=image_url,
+        route_notes=route_notes,
         status=TripStatus.OPEN,
     )
     db.add(trip)
@@ -148,7 +184,6 @@ async def end_trip(
     longitude: float = Form(...),
     gps_accuracy: float = Form(...),
     end_odometer: float = Form(...),
-    route_notes: str = Form(None),
     odometer_image: UploadFile = File(...),
     db: Session = Depends(get_db),
     driver: User = Depends(require_driver),
@@ -157,7 +192,7 @@ async def end_trip(
     End the driver's active trip.
 
     - Accepts an UploadFile for the end odometer image → uploads to Cloudinary.
-    - Records end location, end odometer, route/trip notes.
+    - Records end location and end odometer.
     - Updates status to COMPLETED.
     - Backend calculates KM Used and Working Hours based on Server Time.
     - Automatically flags as EXCEPTION if business rules are violated.
@@ -179,7 +214,6 @@ async def end_trip(
     trip.end_gps_accuracy = gps_accuracy
     trip.end_odometer = end_odometer
     trip.end_odometer_image = image_url
-    trip.route_notes = route_notes
     trip.status = TripStatus.COMPLETED
 
     # ── Auto-detect exceptions ───────────────────────────

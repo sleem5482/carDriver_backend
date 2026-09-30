@@ -73,10 +73,12 @@ class TripListResponse(BaseModel):
     start_date: date
     status: TripStatus
     verification_status: VerificationStatus
+    route_notes: str | None = None
     start_odometer_image: str
     end_odometer_image: str | None = None
     km_used: float | None = None
     working_hours: float | None = None
+    working_hours_formatted: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -108,6 +110,7 @@ class TripDetailResponse(BaseModel):
     # Computed
     km_used: float | None = None
     working_hours: float | None = None
+    working_hours_formatted: str | None = None
 
     # Meta
     route_notes: str | None = None
@@ -128,3 +131,42 @@ class DriverStatusResponse(BaseModel):
     vehicle_model: str | None = None
     has_active_trip: bool
     active_trip_id: uuid.UUID | None = None
+
+
+# ── Driver Trip History Response ─────────────────────────
+
+class DriverTripListResponse(BaseModel):
+    """Returned by GET /driver/trips — trip history for the authenticated driver."""
+    id: uuid.UUID
+    vehicle: VehicleBrief
+
+    # Start
+    start_date: date
+    start_server_time: datetime
+    start_odometer: float
+    start_odometer_image: str
+    start_latitude: float
+    start_longitude: float
+
+    # End (null if trip still OPEN)
+    end_date: date | None = None
+    end_server_time: datetime | None = None
+    end_odometer: float | None = None
+    end_odometer_image: str | None = None
+    end_latitude: float | None = None
+    end_longitude: float | None = None
+
+    # Computed
+    km_used: float | None = None
+    working_hours: float | None = None
+    working_hours_formatted: str | None = None
+
+    # Meta
+    route_notes: str | None = None
+    status: TripStatus
+    verification_status: VerificationStatus
+    exception_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

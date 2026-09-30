@@ -33,7 +33,7 @@ def seed():
         )
         db.add(admin)
         db.commit()
-        print(f"✅ Admin created: phone={admin.mobile_number}, password=admin123")
+        print(f"[SUCCESS] Admin created: phone={admin.mobile_number}, password=admin123")
     finally:
         db.close()
 

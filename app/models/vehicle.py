@@ -18,8 +18,7 @@ from app.database import Base
 class VehicleStatus(str, enum.Enum):
     AVAILABLE = "AVAILABLE"
     ASSIGNED = "ASSIGNED"
-    MAINTENANCE = "MAINTENANCE"
-    DECOMMISSIONED = "DECOMMISSIONED"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
 
 
 # ── Model ─────────────────────────────────────────────────

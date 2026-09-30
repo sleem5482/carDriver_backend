@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_admin
 from app.models.user import User
-from app.models.vehicle import Vehicle
-from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse
+from app.models.vehicle import Vehicle, VehicleStatus
+from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse, VehicleAvailabilityUpdate
 from app.services.audit_service import log_action
 from app.utils.exceptions import not_found, conflict
 
@@ -104,6 +104,43 @@ def update_vehicle(
         action="UPDATE_VEHICLE",
         old_value=old_values,
         new_value=update_data,
+    )
+    db.commit()
+    db.refresh(vehicle)
+    return vehicle
+
+
+@router.patch("/{vehicle_id}/availability", response_model=VehicleResponse)
+def update_vehicle_availability(
+    vehicle_id: uuid.UUID,
+    body: VehicleAvailabilityUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Toggle a vehicle's availability.
+    - `is_available: true`  → sets status to AVAILABLE
+    - `is_available: false` → sets status to NOT_AVAILABLE
+    Cannot change an ASSIGNED vehicle — unassign the driver first.
+    """
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise not_found("Vehicle not found.")
+
+    # Block if the vehicle is currently assigned to a driver
+    if vehicle.status == VehicleStatus.ASSIGNED:
+        raise conflict("Vehicle is currently assigned to a driver. Unassign the driver first.")
+
+    new_status = VehicleStatus.AVAILABLE if body.is_available else VehicleStatus.NOT_AVAILABLE
+    old_status = vehicle.status.value
+    vehicle.status = new_status
+
+    log_action(
+        db,
+        user_id=str(admin.id),
+        action="UPDATE_VEHICLE_AVAILABILITY",
+        old_value={"status": old_status},
+        new_value={"status": new_status.value, "is_available": body.is_available},
     )
     db.commit()
     db.refresh(vehicle)
