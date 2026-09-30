@@ -67,6 +67,7 @@ def list_trips(
                 end_odometer_image=trip.end_odometer_image,
                 km_used=trip.km_used,
                 working_hours=trip.working_hours,
+                working_hours_formatted=trip.working_hours_formatted,
                 created_at=trip.created_at,
             )
         )
@@ -113,6 +114,7 @@ def get_trip(
         end_odometer_image=trip.end_odometer_image,
         km_used=trip.km_used,
         working_hours=trip.working_hours,
+        working_hours_formatted=trip.working_hours_formatted,
         route_notes=trip.route_notes,
         status=trip.status,
         verification_status=trip.verification_status,

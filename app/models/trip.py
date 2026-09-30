@@ -122,16 +122,20 @@ class Trip(Base):
 
     @property
     def working_hours_formatted(self) -> str | None:
-        """Human-readable duration, e.g. '1h 30m', '45m', '2h'. None while trip is open."""
+        """Human-readable duration, e.g. '1h 30m 15s', '45m 10s', '2h', '30s'. None while trip is open."""
         if self.end_server_time is None or self.start_server_time is None:
             return None
-        total_minutes = int((self.end_server_time - self.start_server_time).total_seconds() // 60)
-        hours, minutes = divmod(total_minutes, 60)
-        if hours and minutes:
-            return f"{hours}h {minutes}m"
+        total_seconds = int((self.end_server_time - self.start_server_time).total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        parts: list[str] = []
         if hours:
-            return f"{hours}h"
-        return f"{minutes}m"
+            parts.append(f"{hours}h")
+        if minutes:
+            parts.append(f"{minutes}m")
+        if seconds or not parts:
+            parts.append(f"{seconds}s")
+        return " ".join(parts)
 
     def __repr__(self) -> str:
         return f"<Trip {self.id} driver={self.driver_id} status={self.status.value}>"
