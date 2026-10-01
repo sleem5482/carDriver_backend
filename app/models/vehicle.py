@@ -5,7 +5,7 @@ Vehicle model.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Enum as SAEnum, DateTime
+from sqlalchemy import String, Float, Enum as SAEnum, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
@@ -36,6 +36,9 @@ class Vehicle(Base):
         String(30), unique=True, nullable=False, index=True
     )
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    monthly_km: Mapped[float | None] = mapped_column(
+        Float, nullable=True, comment="Monthly kilometer allowance for this vehicle"
+    )
     status: Mapped[VehicleStatus] = mapped_column(
         SAEnum(VehicleStatus, name="vehicle_status", create_constraint=True),
         nullable=False,
