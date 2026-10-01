@@ -71,6 +71,10 @@ class TripListResponse(BaseModel):
     driver: DriverBrief
     vehicle: VehicleBrief
     start_date: date
+    start_location: str
+    end_location: str | None = None
+    start_odometer: float
+    end_odometer: float | None = None
     status: TripStatus
     verification_status: VerificationStatus
     route_notes: str | None = None

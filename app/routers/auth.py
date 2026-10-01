@@ -37,6 +37,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     if user.status != UserStatus.ACTIVE:
         raise unauthorized("Account is inactive. Contact your administrator.")
 
+
     # Create JWT with server timestamp
     token = create_access_token(user_id=str(user.id), role=user.role.value)
 

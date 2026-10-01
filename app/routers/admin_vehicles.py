@@ -11,11 +11,12 @@ from sqlalchemy.orm import Session, joinedload
 from app.dependencies import get_db, require_admin
 from app.models.user import User
 from app.models.driver_vehicle import DriverVehicleAssignment
-from app.models.trip import Trip, TripStatus
+from app.models.trip import Trip
 from app.models.vehicle import Vehicle, VehicleStatus
 from app.schemas.vehicle import (
     VehicleCreate, VehicleUpdate, VehicleResponse, VehicleAvailabilityUpdate,
     VehicleReportResponse, DriverKmSummary, TripBrief, AssignedDriverBrief,
+    AssignmentRecord, DriverReport,
 )
 from app.services.audit_service import log_action
 from app.utils.exceptions import not_found, conflict
@@ -193,10 +194,11 @@ def get_vehicle_report(
     Returns:
     - Vehicle info (including monthly km limit)
     - Currently assigned driver
-    - Total km used across all drivers (within the date range if provided)
+    - Total km used across all drivers (completed trips, within date range)
     - Overtime km if total exceeds monthly_km limit
-    - Per-driver km breakdown
-    - Full trip list (filterable by date_from / date_to)
+    - High-level per-driver km breakdown (completed trips only)
+    - Per-driver full detail: assignment history + ALL trips (OPEN & COMPLETED)
+    - Flat list of all trips (filterable by date_from / date_to)
     """
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -223,29 +225,59 @@ def get_vehicle_report(
             assigned_at=active_assignment.assigned_at,
         )
 
-    # ── Base trip query (completed trips with km data) ─────
-    trip_query = (
+    # ── All assignment records for this vehicle ────────────
+    all_assignments = (
+        db.query(DriverVehicleAssignment)
+        .options(joinedload(DriverVehicleAssignment.driver))
+        .filter(DriverVehicleAssignment.vehicle_id == vehicle_id)
+        .order_by(DriverVehicleAssignment.assigned_at.desc())
+        .all()
+    )
+
+    # Build a map: driver_id → {driver info, list of AssignmentRecord, is_currently_assigned}
+    driver_assignment_map: dict[uuid.UUID, dict] = {}
+    for asgn in all_assignments:
+        if asgn.driver is None:
+            continue
+        did = asgn.driver_id
+        if did not in driver_assignment_map:
+            driver_assignment_map[did] = {
+                "driver_id": did,
+                "driver_name": asgn.driver.full_name,
+                "mobile_number": asgn.driver.mobile_number,
+                "assignments": [],
+                "is_currently_assigned": False,
+            }
+        driver_assignment_map[did]["assignments"].append(
+            AssignmentRecord(
+                assigned_at=asgn.assigned_at,
+                unassigned_at=asgn.unassigned_at,
+                is_active=asgn.is_active,
+            )
+        )
+        if asgn.is_active:
+            driver_assignment_map[did]["is_currently_assigned"] = True
+
+    # ── ALL trips for this vehicle (OPEN + COMPLETED) ──────
+    all_trips_query = (
         db.query(Trip)
         .options(joinedload(Trip.driver))
-        .filter(
-            Trip.vehicle_id == vehicle_id,
-            Trip.status == TripStatus.COMPLETED,
-            Trip.end_odometer.isnot(None),
-        )
+        .filter(Trip.vehicle_id == vehicle_id)
     )
 
     if date_from:
-        trip_query = trip_query.filter(Trip.start_date >= date_from)
+        all_trips_query = all_trips_query.filter(Trip.start_date >= date_from)
     if date_to:
-        trip_query = trip_query.filter(Trip.start_date <= date_to)
+        all_trips_query = all_trips_query.filter(Trip.start_date <= date_to)
 
-    trips_db = trip_query.order_by(Trip.start_date.desc()).all()
+    all_trips_db = all_trips_query.order_by(Trip.start_date.desc()).all()
 
-    # ── Build trip list ────────────────────────────────────
+    # ── Build flat TripBrief list (all statuses) ───────────
     trip_briefs: list[TripBrief] = []
-    for t in trips_db:
+    for t in all_trips_db:
         trip_briefs.append(TripBrief(
             trip_id=t.id,
+            driver_id=t.driver_id,
             driver_name=t.driver.full_name if t.driver else "Unknown",
             start_date=t.start_date,
             start_location=t.start_location,
@@ -258,9 +290,26 @@ def get_vehicle_report(
             verification_status=t.verification_status.value,
         ))
 
-    # ── Per-driver km aggregation ──────────────────────────
+    # ── Per-driver trip grouping ───────────────────────────
+    driver_trips_map: dict[uuid.UUID, list[TripBrief]] = {}
+    for brief in trip_briefs:
+        driver_trips_map.setdefault(brief.driver_id, []).append(brief)
+
+    # Add drivers who only have trips but no formal assignment record
+    for t in all_trips_db:
+        if t.driver is None or t.driver_id in driver_assignment_map:
+            continue
+        driver_assignment_map[t.driver_id] = {
+            "driver_id": t.driver_id,
+            "driver_name": t.driver.full_name,
+            "mobile_number": t.driver.mobile_number,
+            "assignments": [],
+            "is_currently_assigned": False,
+        }
+
+    # ── Per-driver km aggregation (completed trips only) ───
     driver_km: dict[uuid.UUID, dict] = {}
-    for t in trips_db:
+    for t in all_trips_db:
         if t.driver is None or t.km_used is None:
             continue
         if t.driver_id not in driver_km:
@@ -283,7 +332,25 @@ def get_vehicle_report(
         for v in sorted(driver_km.values(), key=lambda x: x["total_km"], reverse=True)
     ]
 
-    # ── Total km + overtime ────────────────────────────────
+    # ── Build DriverReport list ────────────────────────────
+    driver_reports: list[DriverReport] = []
+    for did, info in driver_assignment_map.items():
+        km_data = driver_km.get(did, {"total_km": 0.0, "trip_count": 0})
+        driver_reports.append(DriverReport(
+            driver_id=info["driver_id"],
+            driver_name=info["driver_name"],
+            mobile_number=info["mobile_number"],
+            assignments=info["assignments"],
+            is_currently_assigned=info["is_currently_assigned"],
+            total_km=round(km_data["total_km"], 2),
+            trip_count=len(driver_trips_map.get(did, [])),
+            trips=driver_trips_map.get(did, []),
+        ))
+
+    # Sort: currently assigned first, then by total_km descending
+    driver_reports.sort(key=lambda r: (not r.is_currently_assigned, -r.total_km))
+
+    # ── Total km + overtime (completed trips) ──────────────
     total_km_used = round(sum(d.total_km for d in driver_summaries), 2)
 
     overtime_km: float | None = None
@@ -309,5 +376,7 @@ def get_vehicle_report(
         overtime_km=overtime_km,
         is_over_limit=is_over_limit,
         drivers=driver_summaries,
+        driver_reports=driver_reports,
         trips=trip_briefs,
     )
+
