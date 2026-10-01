@@ -56,7 +56,7 @@ class Trip(Base):
     )
     start_latitude: Mapped[float] = mapped_column(Float, nullable=False)
     start_longitude: Mapped[float] = mapped_column(Float, nullable=False)
-    start_gps_accuracy: Mapped[float] = mapped_column(Float, nullable=False)
+    start_location: Mapped[str] = mapped_column(String(255), nullable=False)
     start_odometer: Mapped[float] = mapped_column(Float, nullable=False)
     start_odometer_image: Mapped[str] = mapped_column(
         String(512), nullable=False, comment="Cloudinary secure_url"
@@ -69,7 +69,7 @@ class Trip(Base):
     )
     end_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     end_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    end_gps_accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    end_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     end_odometer: Mapped[float | None] = mapped_column(Float, nullable=True)
     end_odometer_image: Mapped[str | None] = mapped_column(
         String(512), nullable=True, comment="Cloudinary secure_url"

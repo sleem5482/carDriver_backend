@@ -35,17 +35,7 @@ def detect_exceptions(trip: Trip) -> list[str]:
             f"End odometer ({trip.end_odometer}) is less than start odometer ({trip.start_odometer})."
         )
 
-    # Rule 2: Weak GPS accuracy at start
-    if trip.start_gps_accuracy > settings.GPS_ACCURACY_THRESHOLD:
-        reasons.append(
-            f"Start GPS accuracy ({trip.start_gps_accuracy}m) exceeds threshold ({settings.GPS_ACCURACY_THRESHOLD}m)."
-        )
 
-    # Rule 3: Weak GPS accuracy at end
-    if trip.end_gps_accuracy is not None and trip.end_gps_accuracy > settings.GPS_ACCURACY_THRESHOLD:
-        reasons.append(
-            f"End GPS accuracy ({trip.end_gps_accuracy}m) exceeds threshold ({settings.GPS_ACCURACY_THRESHOLD}m)."
-        )
 
     return reasons
 

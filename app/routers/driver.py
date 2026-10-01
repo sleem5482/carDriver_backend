@@ -105,7 +105,7 @@ def get_my_trips(
 async def start_trip(
     latitude: float = Form(...),
     longitude: float = Form(...),
-    gps_accuracy: float = Form(...),
+    location: str = Form(...),
     start_odometer: float = Form(...),
     route_notes: str = Form(None),
     odometer_image: UploadFile = File(...),
@@ -147,7 +147,7 @@ async def start_trip(
         start_server_time=now,
         start_latitude=latitude,
         start_longitude=longitude,
-        start_gps_accuracy=gps_accuracy,
+        start_location=location,
         start_odometer=start_odometer,
         start_odometer_image=image_url,
         route_notes=route_notes,
@@ -182,7 +182,7 @@ async def start_trip(
 async def end_trip(
     latitude: float = Form(...),
     longitude: float = Form(...),
-    gps_accuracy: float = Form(...),
+    location: str = Form(...),
     end_odometer: float = Form(...),
     odometer_image: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -211,7 +211,7 @@ async def end_trip(
     trip.end_server_time = now
     trip.end_latitude = latitude
     trip.end_longitude = longitude
-    trip.end_gps_accuracy = gps_accuracy
+    trip.end_location = location
     trip.end_odometer = end_odometer
     trip.end_odometer_image = image_url
     trip.status = TripStatus.COMPLETED

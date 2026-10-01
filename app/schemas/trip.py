@@ -19,7 +19,7 @@ class TripStartRequest(BaseModel):
     """
     latitude: float
     longitude: float
-    gps_accuracy: float
+    location: str
     start_odometer: float
 
 
@@ -30,7 +30,7 @@ class TripEndRequest(BaseModel):
     """
     latitude: float
     longitude: float
-    gps_accuracy: float
+    location: str
     end_odometer: float
     route_notes: str | None = None
 
@@ -94,7 +94,7 @@ class TripDetailResponse(BaseModel):
     start_server_time: datetime
     start_latitude: float
     start_longitude: float
-    start_gps_accuracy: float
+    start_location: str
     start_odometer: float
     start_odometer_image: str
 
@@ -103,7 +103,7 @@ class TripDetailResponse(BaseModel):
     end_server_time: datetime | None = None
     end_latitude: float | None = None
     end_longitude: float | None = None
-    end_gps_accuracy: float | None = None
+    end_location: str | None = None
     end_odometer: float | None = None
     end_odometer_image: str | None = None
 
@@ -147,6 +147,7 @@ class DriverTripListResponse(BaseModel):
     start_odometer_image: str
     start_latitude: float
     start_longitude: float
+    start_location: str
 
     # End (null if trip still OPEN)
     end_date: date | None = None
@@ -155,6 +156,7 @@ class DriverTripListResponse(BaseModel):
     end_odometer_image: str | None = None
     end_latitude: float | None = None
     end_longitude: float | None = None
+    end_location: str | None = None
 
     # Computed
     km_used: float | None = None
