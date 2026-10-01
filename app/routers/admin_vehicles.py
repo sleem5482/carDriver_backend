@@ -1,22 +1,21 @@
 """
-Admin Vehicles router — full CRUD + km-usage reporting.
+Admin Vehicles router — full CRUD + single vehicle report endpoint.
 """
 
 import uuid
-from typing import Optional
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.dependencies import get_db, require_admin
 from app.models.user import User
+from app.models.driver_vehicle import DriverVehicleAssignment
 from app.models.trip import Trip, TripStatus
 from app.models.vehicle import Vehicle, VehicleStatus
 from app.schemas.vehicle import (
     VehicleCreate, VehicleUpdate, VehicleResponse, VehicleAvailabilityUpdate,
-    VehicleKmUsageResponse, DriverKmContribution,
+    VehicleReportResponse, DriverKmSummary, TripBrief, AssignedDriverBrief,
 )
 from app.services.audit_service import log_action
 from app.utils.exceptions import not_found, conflict
@@ -138,7 +137,6 @@ def update_vehicle_availability(
     if not vehicle:
         raise not_found("Vehicle not found.")
 
-    # Block if the vehicle is currently assigned to a driver
     if vehicle.status == VehicleStatus.ASSIGNED:
         raise conflict("Vehicle is currently assigned to a driver. Unassign the driver first.")
 
@@ -179,41 +177,114 @@ def delete_vehicle(
     db.commit()
 
 
-# ── KM Usage Reporting ────────────────────────────────────
+# ── Vehicle Report ─────────────────────────────────────────
 
-def _build_km_usage(vehicle: Vehicle, db: Session) -> VehicleKmUsageResponse:
+@router.get("/{vehicle_id}/report", response_model=VehicleReportResponse)
+def get_vehicle_report(
+    vehicle_id: uuid.UUID,
+    date_from: date | None = Query(None, description="Filter trips from this date (inclusive)"),
+    date_to: date | None = Query(None, description="Filter trips up to this date (inclusive)"),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
     """
-    Compute km-usage stats for a single vehicle:
-    - Sums km_used for all COMPLETED trips of this vehicle, grouped by driver.
-    - Compares total against monthly_km limit and calculates overtime.
+    Full report for a single vehicle.
+
+    Returns:
+    - Vehicle info (including monthly km limit)
+    - Currently assigned driver
+    - Total km used across all drivers (within the date range if provided)
+    - Overtime km if total exceeds monthly_km limit
+    - Per-driver km breakdown
+    - Full trip list (filterable by date_from / date_to)
     """
-    # Aggregate km per driver for this vehicle (only COMPLETED trips with km data)
-    rows = (
-        db.query(
-            Trip.driver_id,
-            User.full_name,
-            func.sum(Trip.end_odometer - Trip.start_odometer).label("km_sum"),
-        )
-        .join(User, User.id == Trip.driver_id)
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise not_found("Vehicle not found.")
+
+    # ── Currently assigned driver ──────────────────────────
+    active_assignment = (
+        db.query(DriverVehicleAssignment)
+        .options(joinedload(DriverVehicleAssignment.driver))
         .filter(
-            Trip.vehicle_id == vehicle.id,
+            DriverVehicleAssignment.vehicle_id == vehicle_id,
+            DriverVehicleAssignment.is_active == True,
+        )
+        .first()
+    )
+
+    assigned_driver: AssignedDriverBrief | None = None
+    if active_assignment and active_assignment.driver:
+        d = active_assignment.driver
+        assigned_driver = AssignedDriverBrief(
+            driver_id=d.id,
+            driver_name=d.full_name,
+            mobile_number=d.mobile_number,
+            assigned_at=active_assignment.assigned_at,
+        )
+
+    # ── Base trip query (completed trips with km data) ─────
+    trip_query = (
+        db.query(Trip)
+        .options(joinedload(Trip.driver))
+        .filter(
+            Trip.vehicle_id == vehicle_id,
             Trip.status == TripStatus.COMPLETED,
             Trip.end_odometer.isnot(None),
         )
-        .group_by(Trip.driver_id, User.full_name)
-        .all()
     )
 
-    drivers = [
-        DriverKmContribution(
-            driver_id=row.driver_id,
-            driver_name=row.full_name,
-            km_used=round(row.km_sum, 2),
+    if date_from:
+        trip_query = trip_query.filter(Trip.start_date >= date_from)
+    if date_to:
+        trip_query = trip_query.filter(Trip.start_date <= date_to)
+
+    trips_db = trip_query.order_by(Trip.start_date.desc()).all()
+
+    # ── Build trip list ────────────────────────────────────
+    trip_briefs: list[TripBrief] = []
+    for t in trips_db:
+        trip_briefs.append(TripBrief(
+            trip_id=t.id,
+            driver_name=t.driver.full_name if t.driver else "Unknown",
+            start_date=t.start_date,
+            start_location=t.start_location,
+            end_location=t.end_location,
+            start_odometer=t.start_odometer,
+            end_odometer=t.end_odometer,
+            km_used=t.km_used,
+            working_hours_formatted=t.working_hours_formatted,
+            status=t.status.value,
+            verification_status=t.verification_status.value,
+        ))
+
+    # ── Per-driver km aggregation ──────────────────────────
+    driver_km: dict[uuid.UUID, dict] = {}
+    for t in trips_db:
+        if t.driver is None or t.km_used is None:
+            continue
+        if t.driver_id not in driver_km:
+            driver_km[t.driver_id] = {
+                "driver_id": t.driver_id,
+                "driver_name": t.driver.full_name,
+                "total_km": 0.0,
+                "trip_count": 0,
+            }
+        driver_km[t.driver_id]["total_km"] += t.km_used
+        driver_km[t.driver_id]["trip_count"] += 1
+
+    driver_summaries = [
+        DriverKmSummary(
+            driver_id=v["driver_id"],
+            driver_name=v["driver_name"],
+            total_km=round(v["total_km"], 2),
+            trip_count=v["trip_count"],
         )
-        for row in rows
+        for v in sorted(driver_km.values(), key=lambda x: x["total_km"], reverse=True)
     ]
 
-    total_km_used = round(sum(d.km_used for d in drivers), 2)
+    # ── Total km + overtime ────────────────────────────────
+    total_km_used = round(sum(d.total_km for d in driver_summaries), 2)
 
     overtime_km: float | None = None
     is_over_limit = False
@@ -222,57 +293,21 @@ def _build_km_usage(vehicle: Vehicle, db: Session) -> VehicleKmUsageResponse:
         overtime_km = round(max(0.0, raw_overtime), 2)
         is_over_limit = overtime_km > 0
 
-    return VehicleKmUsageResponse(
+    return VehicleReportResponse(
         vehicle_id=vehicle.id,
         plate_number=vehicle.plate_number,
+        vehicle_type=vehicle.vehicle_type,
         make=vehicle.make,
         model=vehicle.model,
+        category=vehicle.category,
+        status=vehicle.status,
         monthly_km_limit=vehicle.monthly_km,
+        assigned_driver=assigned_driver,
+        date_from=date_from,
+        date_to=date_to,
         total_km_used=total_km_used,
         overtime_km=overtime_km,
         is_over_limit=is_over_limit,
-        drivers=drivers,
+        drivers=driver_summaries,
+        trips=trip_briefs,
     )
-
-
-@router.get("/{vehicle_id}/km-usage", response_model=VehicleKmUsageResponse)
-def get_vehicle_km_usage(
-    vehicle_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """
-    Return km-usage statistics for a single vehicle across **all drivers**.
-
-    - `total_km_used`: total completed-trip km for this vehicle (all time).
-    - `monthly_km_limit`: the configured monthly allowance (null if not set).
-    - `overtime_km`: km beyond the monthly limit; null if no limit is set.
-    - `is_over_limit`: true when `overtime_km > 0`.
-    - `drivers`: per-driver breakdown of km contribution.
-    """
-    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
-    if not vehicle:
-        raise not_found("Vehicle not found.")
-
-    return _build_km_usage(vehicle, db)
-
-
-@router.get("/km-usage/all", response_model=list[VehicleKmUsageResponse])
-def list_all_vehicles_km_usage(
-    only_over_limit: bool = Query(False, description="If true, only return vehicles that exceeded their monthly km limit"),
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """
-    Return km-usage statistics for **all vehicles**.
-
-    Use `only_over_limit=true` to filter to vehicles that have exceeded
-    their monthly km allowance (i.e. have overtime).
-    """
-    vehicles = db.query(Vehicle).order_by(Vehicle.plate_number).all()
-    results = [_build_km_usage(v, db) for v in vehicles]
-
-    if only_over_limit:
-        results = [r for r in results if r.is_over_limit]
-
-    return results

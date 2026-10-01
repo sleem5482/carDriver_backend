@@ -45,9 +45,20 @@ def _get_available_vehicles(db: Session) -> list[Vehicle]:
 
 
 def _build_user_response(db: Session, user: User) -> UserResponse:
-    """Build a UserResponse with assigned vehicle and available vehicles list."""
+    """Build a UserResponse with assigned vehicle and available vehicles list.
+
+    The `available_vehicles` list contains:
+    - All AVAILABLE vehicles (unassigned)
+    - The vehicle currently assigned to THIS driver (so it still appears in the edit-form dropdown)
+    """
     assigned = _get_assigned_vehicle(db, user.id)
     available = _get_available_vehicles(db)
+
+    # If the driver already has an assigned vehicle it will be ASSIGNED status,
+    # so it won't appear in the AVAILABLE-only list above. Add it explicitly so
+    # the frontend edit-form can still display/keep the current selection.
+    if assigned and not any(v.id == assigned.id for v in available):
+        available = [assigned] + available
 
     return UserResponse(
         id=user.id,
@@ -266,8 +277,28 @@ def update_user(
             vehicle = db.query(Vehicle).filter(Vehicle.id == body.vehicle_id).first()
             if not vehicle:
                 raise not_found("Vehicle not found.")
-            if vehicle.status not in (VehicleStatus.AVAILABLE, VehicleStatus.ASSIGNED):
-                raise conflict("Vehicle is not available for assignment.")
+
+            # Reject if explicitly marked unavailable
+            if vehicle.status == VehicleStatus.NOT_AVAILABLE:
+                raise conflict("Vehicle is marked as not available. Change its status first.")
+
+            # If the vehicle is ASSIGNED, make sure it belongs to THIS driver
+            # (re-confirming the same vehicle is fine; assigning another driver's vehicle is not)
+            if vehicle.status == VehicleStatus.ASSIGNED:
+                other_assignment = (
+                    db.query(DriverVehicleAssignment)
+                    .filter(
+                        DriverVehicleAssignment.vehicle_id == body.vehicle_id,
+                        DriverVehicleAssignment.is_active == True,
+                        DriverVehicleAssignment.driver_id != user_id,
+                    )
+                    .first()
+                )
+                if other_assignment:
+                    raise conflict(
+                        "Vehicle is currently assigned to another driver. Unassign that driver first."
+                    )
+
             _assign_vehicle(db, user.id, body.vehicle_id, str(admin.id))
 
     log_action(

@@ -3,7 +3,7 @@ Vehicle Pydantic schemas.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from pydantic import BaseModel, Field
 
 from app.models.vehicle import VehicleStatus
@@ -49,31 +49,74 @@ class VehicleResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── KM Usage Schemas ──────────────────────────────────────
+# ── Vehicle Report Schemas ────────────────────────────────
 
-class DriverKmContribution(BaseModel):
-    """How much one driver contributed to this vehicle's total km."""
+class TripBrief(BaseModel):
+    """Summary of one trip in the vehicle report."""
+    trip_id: uuid.UUID
+    driver_name: str
+    start_date: date
+    start_location: str
+    end_location: str | None
+    start_odometer: float
+    end_odometer: float | None
+    km_used: float | None
+    working_hours_formatted: str | None
+    status: str
+    verification_status: str
+
+
+class DriverKmSummary(BaseModel):
+    """Per-driver km contribution for a vehicle."""
     driver_id: uuid.UUID
     driver_name: str
-    km_used: float
+    total_km: float
+    trip_count: int
 
 
-class VehicleKmUsageResponse(BaseModel):
+class AssignedDriverBrief(BaseModel):
+    """Currently assigned driver info."""
+    driver_id: uuid.UUID
+    driver_name: str
+    mobile_number: str
+    assigned_at: datetime
+
+
+class VehicleReportResponse(BaseModel):
     """
-    Aggregated km-usage report for a single vehicle.
+    Full vehicle report returned by GET /admin/vehicles/{id}/report.
 
-    - total_km_used: sum of all completed trip km for this vehicle (all time)
-    - monthly_km_limit: the configured monthly allowance (null if not set)
-    - overtime_km: max(0, total_km_used - monthly_km_limit) — null if no limit set
-    - is_over_limit: True when overtime_km > 0
-    - drivers: per-driver breakdown
+    Includes:
+    - Vehicle details (monthly_km limit)
+    - Currently assigned driver (if any)
+    - km-usage totals with overtime calculation
+    - Per-driver km breakdown
+    - Individual trip list (filtered by date range if provided)
     """
+    # ── Vehicle info ──────────────────────────────────────
     vehicle_id: uuid.UUID
     plate_number: str
+    vehicle_type: str
     make: str
     model: str
+    category: str | None
+    status: VehicleStatus
     monthly_km_limit: float | None
+
+    # ── Current assignment ─────────────────────────────────
+    assigned_driver: AssignedDriverBrief | None
+
+    # ── Date filter applied ────────────────────────────────
+    date_from: date | None
+    date_to: date | None
+
+    # ── KM summary ────────────────────────────────────────
     total_km_used: float
-    overtime_km: float | None
+    overtime_km: float | None       # null if no monthly_km_limit set
     is_over_limit: bool
-    drivers: list[DriverKmContribution]
+
+    # ── Driver breakdown ──────────────────────────────────
+    drivers: list[DriverKmSummary]
+
+    # ── Trip list ─────────────────────────────────────────
+    trips: list[TripBrief]
