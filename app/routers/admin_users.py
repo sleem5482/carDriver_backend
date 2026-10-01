@@ -99,6 +99,12 @@ def _assign_vehicle(db: Session, driver_id: uuid.UUID, vehicle_id: uuid.UUID, ad
         {"status": VehicleStatus.ASSIGNED}
     )
 
+    # Flush so the new assignment row exists in the DB transaction
+    # and expire all cached ORM objects (bulk .update() bypasses the identity map,
+    # leaving Vehicle objects stale — expire forces a fresh reload on next access).
+    db.flush()
+    db.expire_all()
+
     log_action(
         db,
         user_id=admin_id,
@@ -125,6 +131,9 @@ def _unassign_vehicle(db: Session, driver_id: uuid.UUID, admin_id: str):
     db.query(Vehicle).filter(Vehicle.id == active.vehicle_id).update(
         {"status": VehicleStatus.AVAILABLE}
     )
+    # Flush and expire so bulk UPDATE is reflected in the session cache
+    db.flush()
+    db.expire_all()
     log_action(
         db,
         user_id=admin_id,
