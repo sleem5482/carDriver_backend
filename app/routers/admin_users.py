@@ -275,7 +275,7 @@ def update_user(
         user_id=str(admin.id),
         action="UPDATE_USER",
         old_value=old_values,
-        new_value={k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None},
+        new_value={k: v for k, v in body.model_dump(exclude_unset=True, mode="json").items() if v is not None},
     )
     db.commit()
     db.refresh(user)
