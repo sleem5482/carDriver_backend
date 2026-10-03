@@ -1,5 +1,8 @@
 """
 Vehicle model.
+daily_shift_hours: optional daily working-hour limit for this vehicle.
+If set, completed trips accumulate working hours per day; any excess is stored
+as overtime_hours on the Trip row.
 """
 
 import uuid
@@ -38,6 +41,9 @@ class Vehicle(Base):
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     monthly_km: Mapped[float | None] = mapped_column(
         Float, nullable=True, comment="Monthly kilometer allowance for this vehicle"
+    )
+    daily_shift_hours: Mapped[float | None] = mapped_column(
+        Float, nullable=True, comment="Daily working-hour shift limit (e.g. 8.0 = 8 h)"
     )
     status: Mapped[VehicleStatus] = mapped_column(
         SAEnum(VehicleStatus, name="vehicle_status", create_constraint=True),

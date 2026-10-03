@@ -16,6 +16,7 @@ class VehicleCreate(BaseModel):
     plate_number: str
     category: str | None = None
     monthly_km: float | None = Field(None, description="Monthly kilometer allowance (e.g. 3000)")
+    daily_shift_hours: float | None = Field(None, description="Daily shift limit in hours (e.g. 8.0)")
     status: VehicleStatus = VehicleStatus.AVAILABLE
 
 
@@ -26,6 +27,7 @@ class VehicleUpdate(BaseModel):
     plate_number: str | None = None
     category: str | None = None
     monthly_km: float | None = None
+    daily_shift_hours: float | None = None
     status: VehicleStatus | None = None
 
 
@@ -42,6 +44,7 @@ class VehicleResponse(BaseModel):
     plate_number: str
     category: str | None
     monthly_km: float | None
+    daily_shift_hours: float | None
     status: VehicleStatus
     created_at: datetime
     updated_at: datetime
@@ -63,6 +66,7 @@ class TripBrief(BaseModel):
     end_odometer: float | None
     km_used: float | None
     working_hours_formatted: str | None
+    overtime_hours: float | None
     status: str
     verification_status: str
 
@@ -131,6 +135,7 @@ class VehicleReportResponse(BaseModel):
     category: str | None
     status: VehicleStatus
     monthly_km_limit: float | None
+    daily_shift_hours: float | None       # daily working-hour shift limit
 
     # ── Current assignment ─────────────────────────────────
     assigned_driver: AssignedDriverBrief | None

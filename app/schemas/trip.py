@@ -83,6 +83,7 @@ class TripListResponse(BaseModel):
     km_used: float | None = None
     working_hours: float | None = None
     working_hours_formatted: str | None = None
+    overtime_hours: float | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -115,6 +116,7 @@ class TripDetailResponse(BaseModel):
     km_used: float | None = None
     working_hours: float | None = None
     working_hours_formatted: str | None = None
+    overtime_hours: float | None = None
 
     # Meta
     route_notes: str | None = None
@@ -166,6 +168,7 @@ class DriverTripListResponse(BaseModel):
     km_used: float | None = None
     working_hours: float | None = None
     working_hours_formatted: str | None = None
+    overtime_hours: float | None = None
 
     # Meta
     route_notes: str | None = None

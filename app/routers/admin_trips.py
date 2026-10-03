@@ -72,6 +72,7 @@ def list_trips(
                 km_used=trip.km_used,
                 working_hours=trip.working_hours,
                 working_hours_formatted=trip.working_hours_formatted,
+                overtime_hours=trip.overtime_hours,
                 created_at=trip.created_at,
             )
         )
@@ -119,6 +120,7 @@ def get_trip(
         km_used=trip.km_used,
         working_hours=trip.working_hours,
         working_hours_formatted=trip.working_hours_formatted,
+        overtime_hours=trip.overtime_hours,
         route_notes=trip.route_notes,
         status=trip.status,
         verification_status=trip.verification_status,

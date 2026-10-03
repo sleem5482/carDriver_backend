@@ -286,6 +286,7 @@ def get_vehicle_report(
             end_odometer=t.end_odometer,
             km_used=t.km_used,
             working_hours_formatted=t.working_hours_formatted,
+            overtime_hours=t.overtime_hours,
             status=t.status.value,
             verification_status=t.verification_status.value,
         ))
@@ -369,6 +370,7 @@ def get_vehicle_report(
         category=vehicle.category,
         status=vehicle.status,
         monthly_km_limit=vehicle.monthly_km,
+        daily_shift_hours=vehicle.daily_shift_hours,
         assigned_driver=assigned_driver,
         date_from=date_from,
         date_to=date_to,

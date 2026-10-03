@@ -2,6 +2,8 @@
 Trip model — tracks driver trips with server-generated timestamps.
 Odometer images stored as Cloudinary URLs (String columns).
 KM Used and Working Hours are computed hybrid properties.
+overtimeHours is computed on trip completion when the vehicle has a
+daily_shift_hours limit and stored as a DB column.
 """
 
 import uuid
@@ -75,6 +77,11 @@ class Trip(Base):
         String(512), nullable=True, comment="Cloudinary secure_url"
     )
     route_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overtime_hours: Mapped[float | None] = mapped_column(
+        Float, nullable=True,
+        comment="Hours worked beyond the vehicle daily shift limit on this trip's date. "
+                "NULL if no shift limit is set on the vehicle."
+    )
 
     # ── Status ────────────────────────────────────────────
     status: Mapped[TripStatus] = mapped_column(

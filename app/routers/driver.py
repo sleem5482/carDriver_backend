@@ -19,7 +19,7 @@ from app.models.driver_vehicle import DriverVehicleAssignment
 from app.models.trip import Trip, TripStatus
 from app.schemas.trip import DriverStatusResponse, DriverTripListResponse
 from app.services.cloudinary_service import upload_odometer_image
-from app.services.trip_service import get_open_trip, apply_exceptions
+from app.services.trip_service import get_open_trip, apply_exceptions, compute_overtime
 from app.services.audit_service import log_action
 from app.utils.exceptions import not_found, conflict, bad_request
 
@@ -216,6 +216,9 @@ async def end_trip(
     trip.route_notes = route_notes
     trip.status = TripStatus.COMPLETED
 
+    # ── Calculate overtime ───────────────────────────────
+    compute_overtime(db, trip)
+
     # ── Auto-detect exceptions ───────────────────────────
     apply_exceptions(trip)
 
@@ -241,6 +244,7 @@ async def end_trip(
         "trip_id": str(trip.id),
         "km_used": trip.km_used,
         "working_hours": trip.working_hours,
+        "overtime_hours": trip.overtime_hours,
         "verification_status": trip.verification_status.value,
         "exception_reason": trip.exception_reason,
     }
