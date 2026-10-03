@@ -74,9 +74,9 @@ class Trip(Base):
     end_odometer_image: Mapped[str | None] = mapped_column(
         String(512), nullable=True, comment="Cloudinary secure_url"
     )
-
-    # ── Notes & Status ────────────────────────────────────
     route_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # ── Status ────────────────────────────────────────────
     status: Mapped[TripStatus] = mapped_column(
         SAEnum(TripStatus, name="trip_status", create_constraint=True),
         nullable=False,

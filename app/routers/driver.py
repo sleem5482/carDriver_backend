@@ -107,7 +107,6 @@ async def start_trip(
     longitude: float = Form(...),
     location: str = Form(...),
     start_odometer: float = Form(...),
-    route_notes: str = Form(None),
     odometer_image: UploadFile = File(...),
     db: Session = Depends(get_db),
     driver: User = Depends(require_driver),
@@ -150,7 +149,6 @@ async def start_trip(
         start_location=location,
         start_odometer=start_odometer,
         start_odometer_image=image_url,
-        route_notes=route_notes,
         status=TripStatus.OPEN,
     )
     db.add(trip)
@@ -184,6 +182,7 @@ async def end_trip(
     longitude: float = Form(...),
     location: str = Form(...),
     end_odometer: float = Form(...),
+    route_notes: str = Form(None),
     odometer_image: UploadFile = File(...),
     db: Session = Depends(get_db),
     driver: User = Depends(require_driver),
@@ -214,6 +213,7 @@ async def end_trip(
     trip.end_location = location
     trip.end_odometer = end_odometer
     trip.end_odometer_image = image_url
+    trip.route_notes = route_notes
     trip.status = TripStatus.COMPLETED
 
     # ── Auto-detect exceptions ───────────────────────────
