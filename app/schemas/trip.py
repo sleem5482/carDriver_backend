@@ -71,6 +71,8 @@ class TripListResponse(BaseModel):
     driver: DriverBrief
     vehicle: VehicleBrief
     start_date: date
+    start_server_time: datetime
+    end_server_time: datetime | None = None
     start_location: str
     end_location: str | None = None
     start_odometer: float

@@ -60,6 +60,8 @@ def list_trips(
                 driver=DriverBrief.model_validate(trip.driver),
                 vehicle=VehicleBrief.model_validate(trip.vehicle),
                 start_date=trip.start_date,
+                start_server_time=trip.start_server_time,
+                end_server_time=trip.end_server_time,
                 start_location=trip.start_location,
                 end_location=trip.end_location,
                 start_odometer=trip.start_odometer,
