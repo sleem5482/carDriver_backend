@@ -61,9 +61,10 @@ class Vehicle(Base):
 
     # ── Relationships ─────────────────────────────────────
     assignments = relationship(
-        "DriverVehicleAssignment", back_populates="vehicle", lazy="selectin"
+        "DriverVehicleAssignment", back_populates="vehicle", lazy="selectin",
+        cascade="all, delete-orphan", passive_deletes=True,
     )
-    trips = relationship("Trip", back_populates="vehicle", lazy="selectin")
+    trips = relationship("Trip", back_populates="vehicle", lazy="selectin", passive_deletes=True)
 
     def __repr__(self) -> str:
         return f"<Vehicle {self.plate_number} ({self.make} {self.model})>"

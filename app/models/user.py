@@ -66,7 +66,7 @@ class User(Base):
     # ── Relationships ─────────────────────────────────────
     vehicle_assignments = relationship(
         "DriverVehicleAssignment", back_populates="driver", lazy="selectin",
-        passive_deletes=True,
+        cascade="all, delete-orphan", passive_deletes=True,
     )
     trips = relationship(
         "Trip", back_populates="driver", lazy="selectin",

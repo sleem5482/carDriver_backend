@@ -4,6 +4,7 @@ Trip Pydantic schemas — Start, End, Response, Filters.
 
 import uuid
 from datetime import datetime, date
+from typing import Optional
 from pydantic import BaseModel
 
 from app.models.trip import TripStatus, VerificationStatus
@@ -68,8 +69,8 @@ class VehicleBrief(BaseModel):
 
 class TripListResponse(BaseModel):
     id: uuid.UUID
-    driver: DriverBrief
-    vehicle: VehicleBrief
+    driver: Optional[DriverBrief] = None
+    vehicle: Optional[VehicleBrief] = None
     start_date: date
     start_server_time: datetime
     end_server_time: datetime | None = None
@@ -93,8 +94,8 @@ class TripListResponse(BaseModel):
 
 class TripDetailResponse(BaseModel):
     id: uuid.UUID
-    driver: DriverBrief
-    vehicle: VehicleBrief
+    driver: Optional[DriverBrief] = None
+    vehicle: Optional[VehicleBrief] = None
 
     # Start metrics
     start_date: date
@@ -146,7 +147,7 @@ class DriverStatusResponse(BaseModel):
 class DriverTripListResponse(BaseModel):
     """Returned by GET /driver/trips — trip history for the authenticated driver."""
     id: uuid.UUID
-    vehicle: VehicleBrief
+    vehicle: Optional[VehicleBrief] = None
 
     # Start
     start_date: date

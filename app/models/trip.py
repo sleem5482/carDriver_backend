@@ -44,12 +44,19 @@ class Trip(Base):
     )
 
     # ── Foreign Keys ──────────────────────────────────────
-    driver_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    vehicle_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True
     )
+
+    # ── Snapshot Fields (for when driver/vehicle is deleted) ──
+    driver_name_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    driver_mobile_snapshot: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    vehicle_plate_snapshot: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    vehicle_make_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    vehicle_model_snapshot: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # ── Start Fields ──────────────────────────────────────
     start_date: Mapped[datetime] = mapped_column(Date, nullable=False)

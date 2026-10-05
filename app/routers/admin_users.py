@@ -353,10 +353,6 @@ def delete_user(
         DriverVehicleAssignment.driver_id == user_id
     ).delete(synchronize_session="fetch")
 
-    # Step 3: Bulk-delete all trips for this driver (same ORM identity map issue).
-    db.query(Trip).filter(
-        Trip.driver_id == user_id
-    ).delete(synchronize_session="fetch")
 
     # Step 4: Log before deleting (audit_logs.user_id will be SET NULL by DB FK cascade)
     log_action(

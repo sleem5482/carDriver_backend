@@ -90,13 +90,61 @@ def get_my_trips(
     if status is not None:
         query = query.filter(Trip.status == status)
 
-    return (
+    trips = (
         query
         .order_by(Trip.start_server_time.desc())
         .offset(offset)
         .limit(limit)
         .all()
     )
+
+    from app.schemas.trip import VehicleBrief
+
+    def _get_vehicle_brief(t: Trip) -> VehicleBrief | None:
+        if t.vehicle:
+            return VehicleBrief.model_validate(t.vehicle)
+        if t.vehicle_plate_snapshot:
+            return VehicleBrief(
+                id=uuid.UUID(int=0),
+                plate_number=t.vehicle_plate_snapshot + " (Deleted)",
+                make=t.vehicle_make_snapshot or "Unknown",
+                model=t.vehicle_model_snapshot or "Unknown"
+            )
+        return None
+
+    results = []
+    for t in trips:
+        results.append(
+            DriverTripListResponse(
+                id=t.id,
+                vehicle=_get_vehicle_brief(t),
+                start_date=t.start_date,
+                start_server_time=t.start_server_time,
+                start_odometer=t.start_odometer,
+                start_odometer_image=t.start_odometer_image,
+                start_latitude=t.start_latitude,
+                start_longitude=t.start_longitude,
+                start_location=t.start_location,
+                end_date=t.end_date,
+                end_server_time=t.end_server_time,
+                end_odometer=t.end_odometer,
+                end_odometer_image=t.end_odometer_image,
+                end_latitude=t.end_latitude,
+                end_longitude=t.end_longitude,
+                end_location=t.end_location,
+                km_used=t.km_used,
+                working_hours=t.working_hours,
+                working_hours_formatted=t.working_hours_formatted,
+                overtime_hours=t.overtime_hours,
+                route_notes=t.route_notes,
+                status=t.status,
+                verification_status=t.verification_status,
+                exception_reason=t.exception_reason,
+                created_at=t.created_at,
+                updated_at=t.updated_at,
+            )
+        )
+    return results
 
 
 # ── POST /driver/trip/start ──────────────────────────────
@@ -149,6 +197,11 @@ async def start_trip(
         start_location=location,
         start_odometer=start_odometer,
         start_odometer_image=image_url,
+        driver_name_snapshot=driver.full_name,
+        driver_mobile_snapshot=driver.mobile_number,
+        vehicle_plate_snapshot=assignment.vehicle.plate_number,
+        vehicle_make_snapshot=assignment.vehicle.make,
+        vehicle_model_snapshot=assignment.vehicle.model,
         status=TripStatus.OPEN,
     )
     db.add(trip)

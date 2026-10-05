@@ -17,6 +17,31 @@ from app.schemas.trip import TripListResponse, TripDetailResponse, DriverBrief, 
 router = APIRouter(prefix="/admin/trips", tags=["Admin – Trips"])
 
 
+def _get_driver_brief(trip: Trip) -> DriverBrief | None:
+    if trip.driver:
+        return DriverBrief.model_validate(trip.driver)
+    if trip.driver_name_snapshot:
+        return DriverBrief(
+            id=uuid.UUID(int=0),
+            full_name=trip.driver_name_snapshot + " (Deleted)",
+            mobile_number=trip.driver_mobile_snapshot or "N/A"
+        )
+    return None
+
+
+def _get_vehicle_brief(trip: Trip) -> VehicleBrief | None:
+    if trip.vehicle:
+        return VehicleBrief.model_validate(trip.vehicle)
+    if trip.vehicle_plate_snapshot:
+        return VehicleBrief(
+            id=uuid.UUID(int=0),
+            plate_number=trip.vehicle_plate_snapshot,
+            make=trip.vehicle_make_snapshot or "Unknown",
+            model=trip.vehicle_model_snapshot or "Unknown"
+        )
+    return None
+
+
 @router.get("/", response_model=list[TripListResponse])
 def list_trips(
     date_from: date | None = Query(None, description="Filter trips starting from this date"),
@@ -57,8 +82,8 @@ def list_trips(
         results.append(
             TripListResponse(
                 id=trip.id,
-                driver=DriverBrief.model_validate(trip.driver),
-                vehicle=VehicleBrief.model_validate(trip.vehicle),
+                driver=_get_driver_brief(trip),
+                vehicle=_get_vehicle_brief(trip),
                 start_date=trip.start_date,
                 start_server_time=trip.start_server_time,
                 end_server_time=trip.end_server_time,
@@ -103,8 +128,8 @@ def get_trip(
 
     return TripDetailResponse(
         id=trip.id,
-        driver=DriverBrief.model_validate(trip.driver),
-        vehicle=VehicleBrief.model_validate(trip.vehicle),
+        driver=_get_driver_brief(trip),
+        vehicle=_get_vehicle_brief(trip),
         start_date=trip.start_date,
         start_server_time=trip.start_server_time,
         start_latitude=trip.start_latitude,

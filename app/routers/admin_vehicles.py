@@ -277,8 +277,8 @@ def get_vehicle_report(
     for t in all_trips_db:
         trip_briefs.append(TripBrief(
             trip_id=t.id,
-            driver_id=t.driver_id,
-            driver_name=t.driver.full_name if t.driver else "Unknown",
+            driver_id=t.driver_id or uuid.UUID(int=0),
+            driver_name=t.driver.full_name if t.driver else (t.driver_name_snapshot or "Unknown") + " (Deleted)",
             start_date=t.start_date,
             start_location=t.start_location,
             end_location=t.end_location,
@@ -298,12 +298,21 @@ def get_vehicle_report(
 
     # Add drivers who only have trips but no formal assignment record
     for t in all_trips_db:
-        if t.driver is None or t.driver_id in driver_assignment_map:
+        did = t.driver_id or uuid.UUID(int=0)
+        if did in driver_assignment_map:
             continue
-        driver_assignment_map[t.driver_id] = {
-            "driver_id": t.driver_id,
-            "driver_name": t.driver.full_name,
-            "mobile_number": t.driver.mobile_number,
+            
+        if t.driver:
+            name = t.driver.full_name
+            mobile = t.driver.mobile_number
+        else:
+            name = (t.driver_name_snapshot or "Unknown") + " (Deleted)"
+            mobile = t.driver_mobile_snapshot or "N/A"
+            
+        driver_assignment_map[did] = {
+            "driver_id": did,
+            "driver_name": name,
+            "mobile_number": mobile,
             "assignments": [],
             "is_currently_assigned": False,
         }
@@ -311,17 +320,22 @@ def get_vehicle_report(
     # ── Per-driver km aggregation (completed trips only) ───
     driver_km: dict[uuid.UUID, dict] = {}
     for t in all_trips_db:
-        if t.driver is None or t.km_used is None:
+        if t.km_used is None:
             continue
-        if t.driver_id not in driver_km:
-            driver_km[t.driver_id] = {
-                "driver_id": t.driver_id,
-                "driver_name": t.driver.full_name,
+        did = t.driver_id or uuid.UUID(int=0)
+        if did not in driver_km:
+            if t.driver:
+                name = t.driver.full_name
+            else:
+                name = (t.driver_name_snapshot or "Unknown") + " (Deleted)"
+            driver_km[did] = {
+                "driver_id": did,
+                "driver_name": name,
                 "total_km": 0.0,
                 "trip_count": 0,
             }
-        driver_km[t.driver_id]["total_km"] += t.km_used
-        driver_km[t.driver_id]["trip_count"] += 1
+        driver_km[did]["total_km"] += t.km_used
+        driver_km[did]["trip_count"] += 1
 
     driver_summaries = [
         DriverKmSummary(
