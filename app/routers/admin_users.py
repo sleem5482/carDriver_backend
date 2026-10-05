@@ -188,8 +188,8 @@ def create_user(
     admin: User = Depends(require_admin),
 ):
     """Create a new user. Optionally assign a vehicle by providing vehicle_id."""
-    # Check uniqueness
-    if db.query(User).filter(User.email == body.email).first():
+    # Check uniqueness — only check email if one was provided (NULL is always allowed)
+    if body.email is not None and db.query(User).filter(User.email == body.email).first():
         raise conflict("Email already registered.")
     if db.query(User).filter(User.mobile_number == body.mobile_number).first():
         raise conflict("Mobile number already registered.")
@@ -254,12 +254,18 @@ def update_user(
         "status": user.status.value,
     }
 
-    # Apply only fields that were explicitly sent AND are not None
-    # This allows partial updates — sending null for a field is treated as "don't change it"
+    # Apply only fields that were explicitly sent.
+    # email is special: it CAN be set to None explicitly (to clear it).
+    # Other nullable fields (notes) also accept None to clear them.
     update_data = body.model_dump(exclude_unset=True, exclude={"vehicle_id", "password"})
     for field, value in update_data.items():
-        if value is not None:  # skip nulls — keep existing value
-            setattr(user, field, value)
+        setattr(user, field, value)
+
+    # If email was explicitly updated to a non-None value, check uniqueness
+    if "email" in update_data and update_data["email"] is not None:
+        existing = db.query(User).filter(User.email == update_data["email"], User.id != user_id).first()
+        if existing:
+            raise conflict("Email already registered.")
 
     # Password update only if a non-empty string was provided
     if body.password:

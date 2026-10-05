@@ -4,7 +4,7 @@ User Pydantic schemas — Create, Update, Response.
 
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 from app.models.user import UserRole, UserStatus
 
@@ -21,6 +21,13 @@ class UserCreate(BaseModel):
     notes: str | None = None
     vehicle_id: uuid.UUID | None = None  # optional assignment on create
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
@@ -31,6 +38,13 @@ class UserUpdate(BaseModel):
     status: UserStatus | None = None
     notes: str | None = None
     vehicle_id: uuid.UUID | None = None  # re-assign vehicle
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
 
 # ── Response Schemas ──────────────────────────────────────
