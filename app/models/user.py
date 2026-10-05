@@ -38,8 +38,8 @@ class User(Base):
     mobile_number: Mapped[str] = mapped_column(
         String(20), unique=True, nullable=False, index=True
     )
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
+    email: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     generated_code: Mapped[str | None] = mapped_column(String(10), nullable=True)

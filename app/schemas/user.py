@@ -14,7 +14,7 @@ from app.models.user import UserRole, UserStatus
 class UserCreate(BaseModel):
     full_name: str
     mobile_number: str
-    email: EmailStr
+    email: EmailStr | None = None
     password: str | None = None
     role: UserRole = UserRole.DRIVER
     status: UserStatus = UserStatus.ACTIVE
@@ -50,7 +50,7 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     full_name: str
     mobile_number: str
-    email: str
+    email: str | None
     role: UserRole
     status: UserStatus
     notes: str | None
@@ -67,7 +67,7 @@ class UserListResponse(BaseModel):
     id: uuid.UUID
     full_name: str
     mobile_number: str
-    email: str
+    email: str | None
     role: UserRole
     status: UserStatus
     created_at: datetime
